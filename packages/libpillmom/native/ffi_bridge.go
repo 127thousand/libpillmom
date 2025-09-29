@@ -32,6 +32,38 @@ func InitTursoDatabase(databaseURL *C.char, authToken *C.char) C.int {
 	return 0
 }
 
+//export InitTursoDatabaseWithSync
+func InitTursoDatabaseWithSync(databaseURL *C.char, authToken *C.char, syncInterval C.int) C.int {
+	url := C.GoString(databaseURL)
+	token := C.GoString(authToken)
+	err := database.InitDBWithSync(url, token, int(syncInterval))
+	if err != nil {
+		return -1
+	}
+	return 0
+}
+
+//export InitTursoDatabaseWithSyncAndPath
+func InitTursoDatabaseWithSyncAndPath(databaseURL *C.char, authToken *C.char, syncInterval C.int, dbPath *C.char) C.int {
+	url := C.GoString(databaseURL)
+	token := C.GoString(authToken)
+	path := C.GoString(dbPath)
+	err := database.InitDBWithSyncAndPath(url, token, int(syncInterval), path)
+	if err != nil {
+		return -1
+	}
+	return 0
+}
+
+//export SyncDatabase
+func SyncDatabase() C.int {
+	err := database.SyncDatabase()
+	if err != nil {
+		return -1
+	}
+	return 0
+}
+
 //export CloseDatabase
 func CloseDatabase() C.int {
 	err := database.CloseDB()

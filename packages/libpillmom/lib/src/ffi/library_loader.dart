@@ -23,13 +23,16 @@ class LibraryLoader {
   }
 
   static String? _getLibraryPath() {
-    // First, try to load from the package's lib directory (for pre-built binaries)
+    // First, try to load from the package's platform-specific directories
     final packageRoot = _findPackageRoot();
     if (packageRoot != null) {
-      final libDir = path.join(packageRoot, 'lib');
-      final libPath = _getPlatformLibraryPath(libDir);
-      if (libPath != null && File(libPath).existsSync()) {
-        return libPath;
+      final platformDir = _getPlatformDirectory();
+      if (platformDir != null) {
+        final platformPath = path.join(packageRoot, platformDir);
+        final libPath = _getPlatformLibraryPath(platformPath);
+        if (libPath != null && File(libPath).existsSync()) {
+          return libPath;
+        }
       }
     }
 
@@ -49,59 +52,39 @@ class LibraryLoader {
     return null;
   }
 
-  static String? _getPlatformLibraryPath(String directory) {
+  static String? _getPlatformDirectory() {
     if (Platform.isMacOS) {
-      final arch = Platform.version.contains('arm64') ? 'arm64' : 'amd64';
-      final specificLib = path.join(directory, 'libpillmom_darwin_$arch.dylib');
-      if (File(specificLib).existsSync()) {
-        return specificLib;
-      }
-      // Fallback to generic name
-      return path.join(directory, 'libpillmom.dylib');
+      return 'macos';
     } else if (Platform.isLinux) {
-      final arch = Platform.version.contains('aarch64') ? 'arm64' : 'amd64';
-      final specificLib = path.join(directory, 'libpillmom_linux_$arch.so');
-      if (File(specificLib).existsSync()) {
-        return specificLib;
-      }
-      // Fallback to generic name
-      return path.join(directory, 'libpillmom.so');
+      return 'linux';
     } else if (Platform.isWindows) {
-      final arch = Platform.version.contains('arm64') ? 'arm64' : 'amd64';
-      final specificLib = path.join(directory, 'libpillmom_windows_$arch.dll');
-      if (File(specificLib).existsSync()) {
-        return specificLib;
-      }
-      // Fallback to generic name
-      return path.join(directory, 'libpillmom.dll');
+      return 'windows';
     } else if (Platform.isAndroid) {
-      // Android libraries are typically loaded from the app's lib directory
-      final arch = _getAndroidArch();
-      return path.join(directory, 'libpillmom_android_$arch.so');
+      return 'android';
     } else if (Platform.isIOS) {
-      // iOS uses static libraries, loaded differently
-      return path.join(directory, 'libpillmom_ios.a');
+      return 'ios';
     }
     return null;
   }
 
-  static String _getAndroidArch() {
-    // This is a simplified version. In a real app, you'd use
-    // platform channels to get the actual architecture
-    final abi = Process.runSync('getprop', ['ro.product.cpu.abi']).stdout.toString().trim();
-    switch (abi) {
-      case 'arm64-v8a':
-        return 'arm64';
-      case 'armeabi-v7a':
-        return 'arm';
-      case 'x86_64':
-        return 'amd64';
-      case 'x86':
-        return '386';
-      default:
-        return 'arm64'; // Default to arm64
+  static String? _getPlatformLibraryPath(String directory) {
+    if (Platform.isMacOS) {
+      // In platform directories, libraries use generic names
+      return path.join(directory, 'libpillmom.dylib');
+    } else if (Platform.isLinux) {
+      return path.join(directory, 'libpillmom.so');
+    } else if (Platform.isWindows) {
+      return path.join(directory, 'libpillmom.dll');
+    } else if (Platform.isAndroid) {
+      // Android libraries are typically loaded from the app's lib directory
+      return path.join(directory, 'libpillmom.so');
+    } else if (Platform.isIOS) {
+      // iOS uses frameworks
+      return path.join(directory, 'libpillmom.framework', 'libpillmom');
     }
+    return null;
   }
+
 
   static DynamicLibrary _loadLibraryFallback() {
     if (Platform.isMacOS || Platform.isLinux) {

@@ -1,23 +1,82 @@
-import 'package:pillmom/pillmom.dart';
+import 'dart:io';
+import 'package:libpillmom/libpillmom.dart';
+
+/// Simple .env file loader
+Map<String, String> loadEnv(String path) {
+  final env = <String, String>{};
+
+  try {
+    final file = File(path);
+    if (!file.existsSync()) {
+      print('Warning: $path not found. Using defaults.');
+      return env;
+    }
+
+    final lines = file.readAsLinesSync();
+    for (final line in lines) {
+      // Skip comments and empty lines
+      if (line.trim().isEmpty || line.trim().startsWith('#')) continue;
+
+      // Parse KEY=VALUE
+      final parts = line.split('=');
+      if (parts.length >= 2) {
+        final key = parts[0].trim();
+        final value = parts.sublist(1).join('=').trim();
+        env[key] = value;
+      }
+    }
+  } catch (e) {
+    print('Error loading .env: $e');
+  }
+
+  return env;
+}
 
 void main() async {
   final client = PillMomClient();
 
-  // Initialize local database
-  print('Initializing local database...');
-  if (!client.initLocalDatabase(dbPath: 'example.db')) {
+  // Load configuration from .env file
+  final env = loadEnv('.env');
+
+  // Check if .env exists, otherwise use example values
+  if (env.isEmpty) {
+    print('No .env file found. Copy .env.example to .env and configure it.');
+    print('Using local database for this demo...\n');
+    env['DATABASE_TYPE'] = 'local';
+    env['DATABASE_PATH'] = 'example.db';
+  }
+
+  // Initialize database based on configuration
+  final dbType = env['DATABASE_TYPE'] ?? 'local';
+  bool initialized = false;
+
+  if (dbType == 'turso') {
+    final databaseUrl = env['TURSO_DATABASE_URL'];
+    final authToken = env['TURSO_AUTH_TOKEN'];
+
+    if (databaseUrl == null || authToken == null) {
+      print('Error: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env');
+      return;
+    }
+
+    print('Initializing Turso database...');
+    print('URL: $databaseUrl');
+    initialized = client.initTursoDatabase(
+      databaseUrl: databaseUrl,
+      authToken: authToken,
+    );
+  } else {
+    final dbPath = env['DATABASE_PATH'] ?? 'example.db';
+    print('Initializing local database: $dbPath');
+    initialized = client.initLocalDatabase(dbPath: dbPath);
+  }
+
+  if (!initialized) {
     print('Failed to initialize database');
     return;
   }
 
-  // Or initialize with Turso (uncomment to use)
-  // if (!client.initTursoDatabase(
-  //   databaseUrl: 'libsql://your-database.turso.io',
-  //   authToken: 'your-auth-token',
-  // )) {
-  //   print('Failed to initialize Turso database');
-  //   return;
-  // }
+  print('Database initialized successfully!\n');
 
   print('\n--- Creating Medications ---');
 
