@@ -1,0 +1,47 @@
+name: libpillmom
+description: A Flutter plugin for managing medications and reminders using Go+Turso/SQLite via FFI
+version: 0.1.0
+repository: https://github.com/ostrearium/libpillmom.git
+
+topics:
+  - medications
+  - reminders
+  - ffi
+  - turso
+  - sqlite
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.0
+  path: ^1.8.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  test: ^1.24.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: co.127k.libpillmom
+        pluginClass: LibPillmomPlugin
+        ffiPlugin: true
+      ios:
+        pluginClass: LibPillmomPlugin
+        ffiPlugin: true
+      linux:
+        pluginClass: LibPillmomPlugin
+        ffiPlugin: true
+      macos:
+        pluginClass: LibPillmomPlugin
+        ffiPlugin: true
+      windows:
+        pluginClass: LibPillmomPlugin
+        ffiPlugin: true

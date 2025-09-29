@@ -1,0 +1,172 @@
+name: Build and Commit Native Libraries
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/libpillmom/native/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-linux-windows-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # Setup Android NDK
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26
+          add-to-path: true
+
+      # Build for Linux, Windows, and Android
+      - name: Build libraries for Linux, Windows, and Android
+        working-directory: packages/libpillmom/native
+        run: |
+          # Create platform directories
+          mkdir -p ../android/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86,x86_64}
+          mkdir -p ../linux
+          mkdir -p ../windows
+
+          # Build for Android
+          export ANDROID_NDK_HOME=$ANDROID_NDK_ROOT
+
+          # Android arm64
+          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
+          export GOOS=android
+          export GOARCH=arm64
+          export CGO_ENABLED=1
+          go build -buildmode=c-shared -o ../android/src/main/jniLibs/arm64-v8a/libpillmom.so ./ffi_bridge.go
+
+          # Android arm
+          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang
+          export GOARCH=arm
+          go build -buildmode=c-shared -o ../android/src/main/jniLibs/armeabi-v7a/libpillmom.so ./ffi_bridge.go
+
+          # Android x86
+          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android30-clang
+          export GOARCH=386
+          go build -buildmode=c-shared -o ../android/src/main/jniLibs/x86/libpillmom.so ./ffi_bridge.go
+
+          # Android x86_64
+          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android30-clang
+          export GOARCH=amd64
+          go build -buildmode=c-shared -o ../android/src/main/jniLibs/x86_64/libpillmom.so ./ffi_bridge.go
+
+          # Linux amd64
+          export GOOS=linux
+          export GOARCH=amd64
+          export CC=gcc
+          go build -buildmode=c-shared -o ../linux/libpillmom.so ./ffi_bridge.go
+
+          # Windows amd64 (cross-compile)
+          export GOOS=windows
+          export GOARCH=amd64
+          export CC=x86_64-w64-mingw32-gcc
+          export CGO_ENABLED=1
+          sudo apt-get update && sudo apt-get install -y mingw-w64
+          go build -buildmode=c-shared -o ../windows/libpillmom.dll ./ffi_bridge.go
+
+      - name: Commit and push libraries
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Add all library files
+          git add packages/libpillmom/android/src/main/jniLibs/**/*.so || true
+          git add packages/libpillmom/linux/*.so || true
+          git add packages/libpillmom/windows/*.dll || true
+
+          # Commit if there are changes
+          git diff --staged --quiet || git commit -m "Update Linux, Windows, and Android libraries [skip ci]"
+          git push
+
+  build-macos-ios:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build macOS and iOS libraries
+        working-directory: packages/libpillmom/native
+        run: |
+          # Create platform directories
+          mkdir -p ../ios
+          mkdir -p ../macos
+
+          # Build macOS libraries
+          export CGO_ENABLED=1
+
+          # macOS arm64
+          export GOOS=darwin
+          export GOARCH=arm64
+          go build -buildmode=c-shared -o ../macos/libpillmom_arm64.dylib ./ffi_bridge.go
+
+          # macOS amd64
+          export GOARCH=amd64
+          go build -buildmode=c-shared -o ../macos/libpillmom_amd64.dylib ./ffi_bridge.go
+
+          # Create universal binary for macOS
+          lipo -create ../macos/libpillmom_arm64.dylib ../macos/libpillmom_amd64.dylib -output ../macos/libpillmom.dylib
+          rm ../macos/libpillmom_arm64.dylib ../macos/libpillmom_amd64.dylib
+
+          # Build iOS libraries
+          export GOOS=ios
+
+          # iOS arm64 (device)
+          export GOARCH=arm64
+          export CGO_CFLAGS="-isysroot $(xcrun --show-sdk-path --sdk iphoneos) -arch arm64 -mios-version-min=12.0"
+          export CGO_LDFLAGS="-isysroot $(xcrun --show-sdk-path --sdk iphoneos) -arch arm64"
+          go build -buildmode=c-archive -o ../ios/libpillmom_device.a ./ffi_bridge.go
+
+          # iOS Simulator x86_64
+          export GOARCH=amd64
+          export CGO_CFLAGS="-isysroot $(xcrun --show-sdk-path --sdk iphonesimulator) -arch x86_64 -mios-simulator-version-min=12.0"
+          export CGO_LDFLAGS="-isysroot $(xcrun --show-sdk-path --sdk iphonesimulator) -arch x86_64"
+          go build -buildmode=c-archive -o ../ios/libpillmom_sim_x86_64.a ./ffi_bridge.go
+
+          # iOS Simulator arm64
+          export GOARCH=arm64
+          export CGO_CFLAGS="-isysroot $(xcrun --show-sdk-path --sdk iphonesimulator) -arch arm64 -mios-simulator-version-min=12.0"
+          export CGO_LDFLAGS="-isysroot $(xcrun --show-sdk-path --sdk iphonesimulator) -arch arm64"
+          go build -buildmode=c-archive -o ../ios/libpillmom_sim_arm64.a ./ffi_bridge.go
+
+          # Create universal binary for iOS Simulator
+          lipo -create ../ios/libpillmom_sim_x86_64.a ../ios/libpillmom_sim_arm64.a -output ../ios/libpillmom_simulator.a
+          rm ../ios/libpillmom_sim_x86_64.a ../ios/libpillmom_sim_arm64.a
+
+          # Rename device library
+          mv ../ios/libpillmom_device.a ../ios/libpillmom.a
+
+          # Remove header files (not needed for FFI)
+          rm -f ../ios/*.h ../macos/*.h
+
+      - name: Commit and push iOS and macOS libraries
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Add iOS and macOS library files
+          git add packages/libpillmom/ios/*.a || true
+          git add packages/libpillmom/macos/*.dylib || true
+
+          # Commit if there are changes
+          git diff --staged --quiet || git commit -m "Update iOS and macOS libraries [skip ci]"
+          git push
