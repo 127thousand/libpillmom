@@ -1,8 +1,8 @@
 package database
 
 import (
+	"database/sql"
 	"fmt"
-	"os"
 
 	"github.com/ostrearium/libpillmom/models"
 	"github.com/tursodatabase/libsql-client-go/libsql"
@@ -18,10 +18,11 @@ func InitDB(databaseURL, authToken string) error {
 		return fmt.Errorf("failed to create connector: %w", err)
 	}
 
+	// Open a sql.DB connection using the connector
+	sqlDB := sql.OpenDB(connector)
+
 	db, err = gorm.Open(sqlite.New(sqlite.Config{
-		DriverName: "libsql",
-		DSN:        "",
-		Conn:       connector,
+		Conn: sqlDB,
 	}), &gorm.Config{})
 
 	if err != nil {
