@@ -18,12 +18,19 @@ build/
 # Go
 *.exe
 *.exe~
-*.dll
-*.so
-*.dylib
 *.test
 *.out
 go.work
+
+# Ignore compiled libraries except in platform directories
+*.dll
+*.so
+*.dylib
+!packages/libpillmom/android/src/main/jniLibs/**/*.so
+!packages/libpillmom/ios/*.a
+!packages/libpillmom/linux/*.so
+!packages/libpillmom/macos/*.dylib
+!packages/libpillmom/windows/*.dll
 
 # Temporary files
 *.log

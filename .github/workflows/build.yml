@@ -88,14 +88,17 @@ jobs:
           # Update remote URL to correct repository
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
-          # Add all library files
-          git add packages/libpillmom/android/src/main/jniLibs/**/*.so || true
-          git add packages/libpillmom/linux/*.so || true
-          git add packages/libpillmom/windows/*.dll || true
+          # Force add all library files (even if gitignored)
+          git add -f packages/libpillmom/android/src/main/jniLibs/**/*.so || true
+          git add -f packages/libpillmom/linux/*.so || true
+          git add -f packages/libpillmom/windows/*.dll || true
 
           # Commit if there are changes
-          git diff --staged --quiet || git commit -m "Update Linux, Windows, and Android libraries [skip ci]"
-          git push
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Linux, Windows, and Android libraries [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi
 
   build-macos-ios:
     runs-on: macos-latest
@@ -172,10 +175,13 @@ jobs:
           # Update remote URL to correct repository
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
-          # Add iOS and macOS library files
-          git add packages/libpillmom/ios/*.a || true
-          git add packages/libpillmom/macos/*.dylib || true
+          # Force add iOS and macOS library files (even if gitignored)
+          git add -f packages/libpillmom/ios/*.a || true
+          git add -f packages/libpillmom/macos/*.dylib || true
 
           # Commit if there are changes
-          git diff --staged --quiet || git commit -m "Update iOS and macOS libraries [skip ci]"
-          git push
+          if ! git diff --staged --quiet; then
+            git commit -m "Update iOS and macOS libraries [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi
