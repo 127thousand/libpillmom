@@ -1,0 +1,1 @@
+{"rustc":6560579996391851404,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[18335059542111711213,"build_script_build",false,9960332182080363505]],"local":[{"RerunIfChanged":{"output":"release/build/cbindgen-dd334f02ba3b4ecd/output","paths":["tests/rust","tests/depfile"]}}],"rustflags":[],"config":0,"compile_kind":0}
