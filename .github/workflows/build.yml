@@ -82,6 +82,9 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
+          # Update remote URL to correct repository
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
           # Add all library files
           git add packages/libpillmom/android/src/main/jniLibs/**/*.so || true
           git add packages/libpillmom/linux/*.so || true
@@ -162,6 +165,9 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+
+          # Update remote URL to correct repository
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
           # Add iOS and macOS library files
           git add packages/libpillmom/ios/*.a || true
