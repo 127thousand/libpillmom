@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.description      = <<-DESC
 A Flutter plugin for managing medications and reminders using Go+Turso/SQLite via FFI.
                        DESC
-  s.homepage         = 'https://github.com/ostrearium/libpillmom'
+  s.homepage         = 'https://github.com/127thousand/libpillmom'
   s.license          = { :file => '../LICENSE' }
   s.author           = { '127k' => 'support@127k.co' }
   s.source           = { :path => '.' }

@@ -1,4 +1,4 @@
-module github.com/ostrearium/libpillmom
+module github.com/127thousand/libpillmom
 
 go 1.24.0
 

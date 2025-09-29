@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"github.com/ostrearium/libpillmom/database"
-	"github.com/ostrearium/libpillmom/models"
+	"github.com/127thousand/libpillmom/database"
+	"github.com/127thousand/libpillmom/models"
 )
 
 func CreateMedication(medication *models.Medication) error {

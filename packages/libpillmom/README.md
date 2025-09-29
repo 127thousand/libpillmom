@@ -17,7 +17,7 @@ Add this to your `pubspec.yaml`:
 dependencies:
   libpillmom:
     git:
-      url: https://github.com/ostrearium/libpillmom.git
+      url: https://github.com/127thousand/libpillmom.git
       path: packages/libpillmom
 ```
 

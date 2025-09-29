@@ -1,7 +1,7 @@
 name: libpillmom
 description: A Flutter plugin for managing medications and reminders using Go+Turso/SQLite via FFI
 version: 0.1.0
-repository: https://github.com/ostrearium/libpillmom.git
+repository: https://github.com/127thousand/libpillmom.git
 
 topics:
   - medications

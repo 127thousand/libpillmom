@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"unsafe"
 
-	"github.com/ostrearium/libpillmom/database"
-	"github.com/ostrearium/libpillmom/models"
-	"github.com/ostrearium/libpillmom/repository"
+	"github.com/127thousand/libpillmom/database"
+	"github.com/127thousand/libpillmom/models"
+	"github.com/127thousand/libpillmom/repository"
 )
 
 //export InitDatabase
