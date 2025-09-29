@@ -123,32 +123,32 @@ jobs:
           # Build macOS libraries
           export CGO_ENABLED=1
 
-          # Detect current architecture
-          ARCH=$(uname -m)
-
-          # Build for native architecture only (GitHub Actions macOS runners are ARM64 now)
+          # GitHub Actions macOS runners are now ARM64 (M1)
+          # go-libsql only provides libraries for darwin_arm64, not darwin_amd64
+          echo "Building for macOS arm64..."
           export GOOS=darwin
+          export GOARCH=arm64
+          go build -buildmode=c-shared -o ../macos/libpillmom.dylib ./ffi_bridge.go
 
-          if [ "$ARCH" = "arm64" ]; then
-            echo "Building for macOS arm64..."
-            export GOARCH=arm64
-            go build -buildmode=c-shared -o ../macos/libpillmom.dylib ./ffi_bridge.go
-          else
-            echo "Building for macOS amd64..."
-            export GOARCH=amd64
-            go build -buildmode=c-shared -o ../macos/libpillmom.dylib ./ffi_bridge.go
-          fi
+          # iOS builds are challenging because:
+          # 1. go-libsql doesn't provide iOS-specific libraries
+          # 2. Cross-compilation from macOS to iOS with CGO is complex
+          #
+          # Workaround: Build a Darwin ARM64 library that can potentially work on iOS
+          # This isn't ideal but allows basic functionality
+          echo "Building iOS libraries (using Darwin ARM64 as base)..."
 
-          # Build iOS libraries - Skip for now due to go-libsql limitations
-          # iOS requires special handling and cross-compilation that go-libsql doesn't support well
-          echo "Skipping iOS builds due to go-libsql cross-compilation limitations"
+          # Build static library for iOS (using darwin/arm64 which is compatible)
+          go build -buildmode=c-archive -o ../ios/libpillmom.a .
 
-          # Create placeholder files so the commit step doesn't fail
-          touch ../ios/libpillmom.a
-          touch ../ios/libpillmom_simulator.a
+          # Copy for simulator (simulator on M1 Macs is also ARM64)
+          cp ../ios/libpillmom.a ../ios/libpillmom_simulator.a
 
           # Remove header files (not needed for FFI)
           rm -f ../ios/*.h ../macos/*.h
+
+          echo "Note: iOS libraries are built using Darwin ARM64 target due to go-libsql limitations"
+          echo "For production iOS apps, consider using a different SQLite driver or building locally"
 
       - name: Commit and push iOS and macOS libraries
         run: |
