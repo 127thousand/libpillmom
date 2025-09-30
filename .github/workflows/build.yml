@@ -70,7 +70,7 @@ jobs:
         run: sccache --show-stats
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos-ios-artifacts
           path: |
@@ -144,7 +144,7 @@ jobs:
 
       - name: Cache cross binary
         id: cache-cross
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cross
           key: cross-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -184,7 +184,7 @@ jobs:
         run: sccache --show-stats
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: packages/libpillmom/${{ matrix.output }}
@@ -225,7 +225,7 @@ jobs:
           done
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
