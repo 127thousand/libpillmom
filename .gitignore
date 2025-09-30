@@ -22,6 +22,9 @@ build/
 *.out
 go.work
 
+# Rust
+packages/libpillmom/rust/target/
+
 # Ignore compiled libraries except in platform directories
 *.dll
 *.so

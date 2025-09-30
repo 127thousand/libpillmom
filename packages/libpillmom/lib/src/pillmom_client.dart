@@ -1,17 +1,41 @@
-import 'dart:convert';
-import 'dart:ffi';
-import 'package:ffi/ffi.dart';
-import 'ffi/bindings.dart';
-import 'ffi/library_loader.dart';
-import 'models/medication.dart';
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'generated/api.dart';
+import 'generated/models.dart';
+import 'generated/frb_generated.dart';
+import 'dart:io' show Platform;
+import 'package:path/path.dart' as path;
+
+export 'generated/models.dart';
 
 class PillMomClient {
-  late final PillMomBindings _bindings;
+  PillMomApi? _api;
   static PillMomClient? _instance;
+  static bool _initialized = false;
 
-  PillMomClient._internal() {
-    final dylib = LibraryLoader.library;
-    _bindings = PillMomBindings(dylib);
+  PillMomClient._internal();
+
+  static Future<void> _ensureInitialized() async {
+    if (!_initialized) {
+      // Get the proper library path
+      String libraryPath;
+      if (Platform.isMacOS) {
+        // For macOS, look for the library relative to the package
+        final packageRoot = path.dirname(path.dirname(Platform.script.path));
+        libraryPath = path.join(packageRoot, 'macos', 'libpillmom.dylib');
+      } else if (Platform.isLinux) {
+        libraryPath = 'libpillmom.so';
+      } else if (Platform.isWindows) {
+        libraryPath = 'libpillmom.dll';
+      } else {
+        libraryPath = 'libpillmom';
+      }
+
+      // Initialize the Rust library with explicit path
+      await RustLib.init(
+        externalLibrary: ExternalLibrary.open(libraryPath),
+      );
+      _initialized = true;
+    }
   }
 
   factory PillMomClient() {
@@ -19,207 +43,135 @@ class PillMomClient {
     return _instance!;
   }
 
-  String _callRustFunction(Pointer<Utf8> Function() fn) {
-    final resultPtr = fn();
-    final result = resultPtr.toDartString();
-    _bindings.freeString(resultPtr);
-    return result;
+  // ===== New Connection Methods =====
+
+  /// Connect to an in-memory database (no persistence)
+  Future<void> openInMemory() async {
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    await _api!.openInMemory();
   }
 
-  String _callRustFunctionWithParam(
-      Pointer<Utf8> Function(Pointer<Utf8>) fn, String param) {
-    final paramPtr = param.toNativeUtf8();
-    final resultPtr = fn(paramPtr);
-    final result = resultPtr.toDartString();
-    malloc.free(paramPtr);
-    _bindings.freeString(resultPtr);
-    return result;
+  /// Connect to a local SQLite database file
+  Future<void> openLocal(String path) async {
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    await _api!.openLocal(path: path);
   }
 
-  String _callRustFunctionWithTwoParams(
-      Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>) fn,
-      String param1,
-      String param2) {
-    final param1Ptr = param1.toNativeUtf8();
-    final param2Ptr = param2.toNativeUtf8();
-    final resultPtr = fn(param1Ptr, param2Ptr);
-    final result = resultPtr.toDartString();
-    malloc.free(param1Ptr);
-    malloc.free(param2Ptr);
-    _bindings.freeString(resultPtr);
-    return result;
+  /// Connect to a remote Turso database
+  Future<void> openRemote(String url, String authToken) async {
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    await _api!.openRemote(url: url, authToken: authToken);
   }
 
-  String _callRustFunctionWithIntParam(
-      Pointer<Utf8> Function(int) fn, int param) {
-    final resultPtr = fn(param);
-    final result = resultPtr.toDartString();
-    _bindings.freeString(resultPtr);
-    return result;
+  /// Connect to an embedded replica (local SQLite that syncs with remote)
+  /// Note: Currently falls back to remote connection due to FFI issues
+  Future<void> openEmbeddedReplica(
+    String path,
+    String url,
+    String authToken, {
+    Duration? syncPeriod,
+  }) async {
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    await _api!.openEmbeddedReplica(
+      path: path,
+      url: url,
+      authToken: authToken,
+      syncPeriod: syncPeriod?.inSeconds.toDouble(),
+    );
   }
+
+  // ===== Legacy Methods (for backward compatibility) =====
 
   Future<void> initTursoDatabase(String url, String authToken) async {
-    final result = _callRustFunctionWithTwoParams(
-        _bindings.initTursoDb, url, authToken);
-    final json = jsonDecode(result);
-    if (json['success'] != true) {
-      throw Exception(json['error'] ?? 'Failed to initialize Turso database');
-    }
+    await openRemote(url, authToken);
   }
 
   Future<void> initLocalDatabase([String? dbPath]) async {
     final path = dbPath ?? 'pillmom.db';
-    final result = _callRustFunctionWithParam(_bindings.initLocalDb, path);
-    final json = jsonDecode(result);
-    if (json['success'] != true) {
-      throw Exception(json['error'] ?? 'Failed to initialize local database');
-    }
+    await openLocal(path);
   }
 
   Future<void> syncDatabase() async {
-    final result = _callRustFunction(_bindings.syncDatabase);
-    final json = jsonDecode(result);
-    if (json['success'] != true) {
-      throw Exception(json['error'] ?? 'Failed to sync database');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    await _api!.syncDatabase();
   }
 
   Future<void> closeDatabase() async {
-    final result = _callRustFunction(_bindings.closeDatabase);
-    final json = jsonDecode(result);
-    if (json['success'] != true) {
-      throw Exception(json['error'] ?? 'Failed to close database');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    await _api!.closeDatabase();
   }
 
+  // Medication operations
   Future<int> createMedication({
     required String name,
     required String dosage,
     String description = '',
   }) async {
-    final medication = {
-      'name': name,
-      'dosage': dosage,
-      'description': description,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-      'deleted_at': null,
-      'reminders': [],
-    };
-
-    final result = _callRustFunctionWithParam(
-        _bindings.createMedication, jsonEncode(medication));
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      return json['id'];
-    } else {
-      throw Exception(json['error'] ?? 'Failed to create medication');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.createMedication(
+      name: name,
+      dosage: dosage,
+      description: description,
+    );
   }
 
   Future<List<Medication>> getAllMedications() async {
-    final result = _callRustFunction(_bindings.getAllMedications);
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      final List<dynamic> medicationsJson = json['medications'];
-      return medicationsJson
-          .map((m) => Medication.fromJson(m as Map<String, dynamic>))
-          .toList();
-    } else {
-      throw Exception(json['error'] ?? 'Failed to get medications');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.getAllMedications();
   }
 
   Future<bool> updateMedication(Medication medication) async {
-    final medicationJson = medication.toJson();
-
-    final result = _callRustFunctionWithParam(
-        _bindings.updateMedication, jsonEncode(medicationJson));
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      return json['updated'] == true;
-    } else {
-      throw Exception(json['error'] ?? 'Failed to update medication');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.updateMedication(medication: medication);
   }
 
   Future<bool> deleteMedication(int id) async {
-    final result = _callRustFunctionWithIntParam(_bindings.deleteMedication, id);
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      return json['deleted'] == true;
-    } else {
-      throw Exception(json['error'] ?? 'Failed to delete medication');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.deleteMedication(id: id);
   }
 
+  // Reminder operations
   Future<int> createReminder({
     required int medicationId,
     required String time,
     required String days,
     bool isActive = true,
   }) async {
-    final reminder = {
-      'medication_id': medicationId,
-      'time': time,
-      'days': days,
-      'is_active': isActive,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-      'deleted_at': null,
-    };
-
-    final result = _callRustFunctionWithParam(
-        _bindings.createReminder, jsonEncode(reminder));
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      return json['id'];
-    } else {
-      throw Exception(json['error'] ?? 'Failed to create reminder');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.createReminder(
+      medicationId: medicationId,
+      time: time,
+      days: days,
+      isActive: isActive,
+    );
   }
 
   Future<List<Reminder>> getActiveReminders() async {
-    final result = _callRustFunction(_bindings.getActiveReminders);
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      final List<dynamic> remindersJson = json['reminders'];
-      return remindersJson
-          .map((r) => Reminder.fromJson(r as Map<String, dynamic>))
-          .toList();
-    } else {
-      throw Exception(json['error'] ?? 'Failed to get active reminders');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.getActiveReminders();
   }
 
   Future<bool> updateReminder(Reminder reminder) async {
-    final reminderJson = reminder.toJson();
-
-    final result = _callRustFunctionWithParam(
-        _bindings.updateReminder, jsonEncode(reminderJson));
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      return json['updated'] == true;
-    } else {
-      throw Exception(json['error'] ?? 'Failed to update reminder');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.updateReminder(reminder: reminder);
   }
 
   Future<bool> deleteReminder(int id) async {
-    final result = _callRustFunctionWithIntParam(_bindings.deleteReminder, id);
-    final json = jsonDecode(result);
-
-    if (json['success'] == true) {
-      return json['deleted'] == true;
-    } else {
-      throw Exception(json['error'] ?? 'Failed to delete reminder');
-    }
+    await _ensureInitialized();
+    _api ??= PillMomApi();
+    return await _api!.deleteReminder(id: id);
   }
 }

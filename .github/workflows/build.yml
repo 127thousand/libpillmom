@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/libpillmom/native/**'
+      - 'packages/libpillmom/rust/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
@@ -26,7 +26,7 @@ jobs:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
 
       - name: Build macOS and iOS libraries
-        working-directory: packages/libpillmom/native
+        working-directory: packages/libpillmom/rust
         run: |
           # Create directories
           mkdir -p ../macos ../ios
@@ -90,7 +90,7 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build Linux, Windows, and Android libraries
-        working-directory: packages/libpillmom/native
+        working-directory: packages/libpillmom/rust
         run: |
           # Create directories
           mkdir -p ../linux ../windows

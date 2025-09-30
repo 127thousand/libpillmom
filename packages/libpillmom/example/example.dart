@@ -48,164 +48,227 @@ void main() async {
 
   // Initialize database based on configuration
   final dbType = env['DATABASE_TYPE'] ?? 'local';
-  bool initialized = false;
 
-  if (dbType == 'turso') {
-    final databaseUrl = env['TURSO_DATABASE_URL'];
-    final authToken = env['TURSO_AUTH_TOKEN'];
+  try {
+    switch (dbType) {
+      case 'memory':
+        print('Initializing in-memory database (no persistence)...');
+        await client.openInMemory();
+        break;
 
-    if (databaseUrl == null || authToken == null) {
-      print('Error: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env');
-      return;
+      case 'local':
+        final dbPath = env['DATABASE_PATH'] ?? 'example.db';
+        print('Initializing local database: $dbPath');
+        await client.openLocal(dbPath);
+        break;
+
+      case 'remote':
+      case 'turso':
+        final databaseUrl = env['TURSO_DATABASE_URL'];
+        final authToken = env['TURSO_AUTH_TOKEN'];
+
+        if (databaseUrl == null || authToken == null) {
+          print('Error: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env');
+          return;
+        }
+
+        print('Initializing remote Turso database...');
+        print('URL: $databaseUrl\n');
+        await client.openRemote(databaseUrl, authToken);
+        break;
+
+      case 'replica':
+        final databaseUrl = env['TURSO_DATABASE_URL'];
+        final authToken = env['TURSO_AUTH_TOKEN'];
+        final replicaPath = env['REPLICA_PATH'] ?? 'local_replica.db';
+        final syncPeriod = env['SYNC_PERIOD'] != null
+            ? Duration(seconds: int.parse(env['SYNC_PERIOD']!))
+            : Duration(seconds: 60);
+
+        if (databaseUrl == null || authToken == null) {
+          print('Error: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env');
+          return;
+        }
+
+        print('Initializing embedded replica...');
+        print('Local path: $replicaPath');
+        print('Remote URL: $databaseUrl');
+        print('Sync period: ${syncPeriod.inSeconds} seconds\n');
+        await client.openEmbeddedReplica(
+          replicaPath,
+          databaseUrl,
+          authToken,
+          syncPeriod: syncPeriod,
+        );
+        break;
+
+      default:
+        print('Unknown database type: $dbType');
+        print('Valid types: memory, local, remote, turso, replica');
+        return;
     }
 
-    print('Initializing Turso database...');
-    print('URL: $databaseUrl');
-    initialized = client.initTursoDatabase(
-      databaseUrl: databaseUrl,
-      authToken: authToken,
+    print('Database initialized successfully!\n');
+
+    print('\n--- Creating Medications ---\n');
+
+    // Create medications
+    final aspirinId = await client.createMedication(
+      name: 'Aspirin',
+      dosage: '100mg',
+      description: 'Pain reliever and blood thinner',
     );
-  } else {
-    final dbPath = env['DATABASE_PATH'] ?? 'example.db';
-    print('Initializing local database: $dbPath');
-    initialized = client.initLocalDatabase(dbPath: dbPath);
-  }
+    print('Created Aspirin with ID: $aspirinId');
 
-  if (!initialized) {
-    print('Failed to initialize database');
-    return;
-  }
+    final vitaminDId = await client.createMedication(
+      name: 'Vitamin D',
+      dosage: '1000 IU',
+      description: 'Vitamin D supplement',
+    );
+    print('Created Vitamin D with ID: $vitaminDId');
 
-  print('Database initialized successfully!\n');
+    final omeprazoleId = await client.createMedication(
+      name: 'Omeprazole',
+      dosage: '20mg',
+      description: 'Proton pump inhibitor for acid reflux',
+    );
+    print('Created Omeprazole with ID: $omeprazoleId');
 
-  print('\n--- Creating Medications ---');
+    print('\n--- Setting Up Reminders ---\n');
 
-  // Create medications
-  final aspirinId = client.createMedication(
-    name: 'Aspirin',
-    dosage: '100mg',
-    description: 'Pain reliever and blood thinner',
-  );
-  print('Created Aspirin with ID: $aspirinId');
-
-  final vitaminDId = client.createMedication(
-    name: 'Vitamin D',
-    dosage: '1000 IU',
-    description: 'Vitamin D supplement',
-  );
-  print('Created Vitamin D with ID: $vitaminDId');
-
-  final omeprazoleId = client.createMedication(
-    name: 'Omeprazole',
-    dosage: '20mg',
-    description: 'Proton pump inhibitor for acid reflux',
-  );
-  print('Created Omeprazole with ID: $omeprazoleId');
-
-  print('\n--- Setting Up Reminders ---');
-
-  // Create reminders for medications
-  if (aspirinId != null) {
-    final reminderId = client.createReminder(
+    // Create reminders for medications
+    final reminder1Id = await client.createReminder(
       medicationId: aspirinId,
       time: '08:00',
       days: 'Daily',
     );
-    print('Created daily reminder for Aspirin at 08:00, ID: $reminderId');
-  }
+    print('Created daily reminder for Aspirin at 08:00, ID: $reminder1Id');
 
-  if (vitaminDId != null) {
-    final reminderId = client.createReminder(
+    final reminder2Id = await client.createReminder(
       medicationId: vitaminDId,
       time: '09:00',
       days: 'Mon,Wed,Fri',
     );
-    print('Created MWF reminder for Vitamin D at 09:00, ID: $reminderId');
-  }
+    print('Created MWF reminder for Vitamin D at 09:00, ID: $reminder2Id');
 
-  if (omeprazoleId != null) {
-    final reminder1 = client.createReminder(
+    final reminder3Id = await client.createReminder(
       medicationId: omeprazoleId,
       time: '07:00',
       days: 'Daily',
     );
-    print('Created morning reminder for Omeprazole at 07:00, ID: $reminder1');
+    print('Created morning reminder for Omeprazole at 07:00, ID: $reminder3Id');
 
-    final reminder2 = client.createReminder(
+    final reminder4Id = await client.createReminder(
       medicationId: omeprazoleId,
       time: '19:00',
       days: 'Daily',
     );
-    print('Created evening reminder for Omeprazole at 19:00, ID: $reminder2');
-  }
+    print('Created evening reminder for Omeprazole at 19:00, ID: $reminder4Id');
 
-  print('\n--- Fetching All Medications ---');
+    print('\n--- Fetching All Medications ---');
 
-  // Get all medications with their reminders
-  final medications = client.getAllMedications();
-  for (final med in medications) {
-    print('${med.name} (${med.dosage}): ${med.description}');
+    // Get all medications with their reminders
+    final medications = await client.getAllMedications();
+    for (final med in medications) {
+      print('${med.name} (${med.dosage}): ${med.description}');
 
-    // Get reminders for this medication
-    final reminders = client.getRemindersByMedication(med.id!);
-    for (final reminder in reminders) {
-      print('  - Reminder: ${reminder.time} on ${reminder.days} (Active: ${reminder.isActive})');
+      // Reminders are included in the medication object
+      if (med.reminders.isNotEmpty) {
+        for (final reminder in med.reminders) {
+          print('  - Reminder: ${reminder.time} on ${reminder.days} (Active: ${reminder.isActive})');
+        }
+      }
     }
-  }
 
-  print('\n--- Fetching Active Reminders ---');
+    print('\n--- Fetching Active Reminders ---');
 
-  // Get all active reminders
-  final activeReminders = client.getActiveReminders();
-  print('Total active reminders: ${activeReminders.length}');
-  for (final reminder in activeReminders) {
-    print('- ${reminder.time} on ${reminder.days} for medication ID ${reminder.medicationId}');
-  }
+    // Get all active reminders
+    final activeReminders = await client.getActiveReminders();
+    print('Total active reminders: ${activeReminders.length}');
+    for (final reminder in activeReminders) {
+      print('- ${reminder.time} on ${reminder.days} for medication ID ${reminder.medicationId}');
+    }
 
-  print('\n--- Updating a Medication ---');
+    print('\n--- Updating a Medication ---\n');
 
-  // Update a medication
-  if (aspirinId != null) {
-    final success = client.updateMedication(
-      id: aspirinId,
-      name: 'Aspirin',
-      dosage: '75mg',  // Changed dosage
+    // Update a medication - need to get the full object first
+    final medsForUpdate = await client.getAllMedications();
+    final aspirinMed = medsForUpdate.firstWhere((m) => m.id == aspirinId);
+
+    // Update the medication with new dosage
+    final updatedMed = Medication(
+      id: aspirinMed.id,
+      name: aspirinMed.name,
+      dosage: '75mg', // Changed dosage
       description: 'Low-dose aspirin for heart health',
+      createdAt: aspirinMed.createdAt,
+      updatedAt: aspirinMed.updatedAt,
+      deletedAt: aspirinMed.deletedAt,
+      reminders: aspirinMed.reminders,
     );
-    print('Updated Aspirin dosage: $success');
 
-    // Fetch updated medication
-    final updatedMed = client.getMedication(aspirinId);
-    if (updatedMed != null) {
-      print('Updated medication: ${updatedMed.name} - ${updatedMed.dosage}');
+    final updateSuccess = await client.updateMedication(updatedMed);
+    print('Updated Aspirin dosage: $updateSuccess');
+
+    // Verify the update
+    final updatedMeds = await client.getAllMedications();
+    final verifyMed = updatedMeds.firstWhere((m) => m.id == aspirinId);
+    print('Updated medication: ${verifyMed.name} - ${verifyMed.dosage}');
+
+    print('\n--- Deactivating a Reminder ---\n');
+
+    // Deactivate the first reminder
+    if (activeReminders.isNotEmpty) {
+      final firstReminder = activeReminders.first;
+      final updatedReminder = Reminder(
+        id: firstReminder.id,
+        medicationId: firstReminder.medicationId,
+        time: firstReminder.time,
+        days: firstReminder.days,
+        isActive: false, // Deactivate
+        createdAt: firstReminder.createdAt,
+        updatedAt: firstReminder.updatedAt,
+        deletedAt: firstReminder.deletedAt,
+      );
+
+      final reminderUpdateSuccess = await client.updateReminder(updatedReminder);
+      print('Deactivated reminder: $reminderUpdateSuccess');
     }
+
+    print('\n--- Syncing Database (if applicable) ---\n');
+
+    // Sync database if using remote or replica
+    if (dbType == 'remote' || dbType == 'turso' || dbType == 'replica') {
+      try {
+        await client.syncDatabase();
+        print('Database synced successfully');
+      } catch (e) {
+        print('Sync operation completed or not applicable: $e');
+      }
+    } else {
+      print('Sync not needed for $dbType database');
+    }
+
+    print('\n--- Cleaning Up (Optional) ---\n');
+
+    // Delete a medication (uncomment to test)
+    // final deleteSuccess = await client.deleteMedication(vitaminDId);
+    // print('Deleted Vitamin D: $deleteSuccess');
+
+    // Delete a reminder (uncomment to test)
+    // if (activeReminders.isNotEmpty) {
+    //   final deleteReminderSuccess = await client.deleteReminder(activeReminders.first.id!);
+    //   print('Deleted reminder: $deleteReminderSuccess');
+    // }
+
+    // Close database connection
+    await client.closeDatabase();
+    print('Database connection closed.');
+
+  } catch (e) {
+    print('Error: $e');
+    print('\nFailed to initialize database');
+    print('If using Turso, make sure your URL and auth token are correct.');
+    print('If using local database, make sure the path is writable.');
   }
-
-  print('\n--- Deactivating a Reminder ---');
-
-  // Get and deactivate a reminder
-  final allReminders = client.getAllReminders();
-  if (allReminders.isNotEmpty) {
-    final firstReminder = allReminders.first;
-    final success = client.updateReminder(
-      id: firstReminder.id!,
-      time: firstReminder.time,
-      days: firstReminder.days,
-      isActive: false,
-    );
-    print('Deactivated reminder: $success');
-  }
-
-  print('\n--- Cleaning Up (Optional) ---');
-
-  // Delete a medication (this will cascade delete its reminders in the database)
-  // Uncomment to test deletion
-  // if (vitaminDId != null) {
-  //   final success = client.deleteMedication(vitaminDId);
-  //   print('Deleted Vitamin D: $success');
-  // }
-
-  // Close database connection
-  client.closeDatabase();
-  print('\nDatabase connection closed.');
 }

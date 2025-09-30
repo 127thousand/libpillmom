@@ -1,14 +1,14 @@
 name: libpillmom
-description: A Flutter plugin for managing medications and reminders using Go+Turso/SQLite via FFI
+description: A Flutter plugin for managing medications and reminders using Rust+SeaORM/Turso via Flutter Rust Bridge
 version: 0.1.0
 repository: https://github.com/127thousand/libpillmom.git
 
 topics:
   - medications
   - reminders
-  - ffi
+  - flutter-rust-bridge
+  - seaorm
   - turso
-  - sqlite
 
 environment:
   sdk: ^3.0.0
@@ -17,6 +17,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_rust_bridge: 2.11.1
   ffi: ^2.1.0
   path: ^1.8.3
 

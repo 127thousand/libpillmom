@@ -1,0 +1,12 @@
+# Configuration for flutter_rust_bridge_codegen
+
+# Rust input - use crate::api to scan the api module
+rust_input: crate::api
+# Rust project root
+rust_root: packages/libpillmom/rust/
+# Where to generate Dart code
+dart_output: packages/libpillmom/lib/src/generated
+# Dart wrapper code
+dart_entrypoint_class_name: RustLib
+# Disable web generation
+web: false
