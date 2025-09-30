@@ -10,7 +10,7 @@ class PillMomClient {
   static PillMomClient? _instance;
 
   PillMomClient._internal() {
-    final dylib = LibraryLoader.loadLibrary();
+    final dylib = LibraryLoader.library;
     _bindings = PillMomBindings(dylib);
   }
 
