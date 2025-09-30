@@ -151,9 +151,10 @@ jobs:
       - name: Install cross
         if: steps.cache-cross.outputs.cache-hit != 'true'
         run: |
-          # Download pre-built cross binary instead of building from source
-          curl -L https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz | tar xz
+          # Download pre-built cross binary with Android fixes
+          curl -L https://github.com/cross-rs/cross/releases/latest/download/cross-x86_64-unknown-linux-musl.tar.gz | tar xz
           mv cross ~/.cargo/bin/
+          chmod +x ~/.cargo/bin/cross
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.3
