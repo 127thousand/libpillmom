@@ -38,6 +38,7 @@ pub async fn get_all_medications() -> Result<Vec<Medication>> {
     let conn = get_connection().ok_or_else(|| anyhow::anyhow!("No database connection"))?;
     let conn = conn.lock().await;
 
+    // First get all medications
     let mut stmt = conn
         .prepare(
             "SELECT id, name, dosage, description, created_at, updated_at, deleted_at
@@ -64,10 +65,40 @@ pub async fn get_all_medications() -> Result<Vec<Medication>> {
         medications.push(med);
     }
 
-    // Load reminders for each medication
-    for med in &mut medications {
-        if let Some(id) = med.id {
-            med.reminders = get_reminders_for_medication(id).await?;
+    // Then get all reminders in a single query
+    if !medications.is_empty() {
+        let mut reminder_stmt = conn
+            .prepare(
+                "SELECT id, medication_id, time, days, is_active, created_at, updated_at, deleted_at
+                 FROM reminders WHERE deleted_at IS NULL",
+            )
+            .await?;
+
+        let mut reminder_rows = reminder_stmt.query(()).await?;
+
+        while let Some(row) = reminder_rows.next().await? {
+            let reminder = Reminder {
+                id: Some(row.get(0)?),
+                medication_id: row.get(1)?,
+                time: row.get(2)?,
+                days: row.get(3)?,
+                is_active: row.get::<i64>(4)? != 0,
+                created_at: row.get::<String>(5)?.parse()?,
+                updated_at: row.get::<String>(6)?.parse()?,
+                deleted_at: row
+                    .get::<Option<String>>(7)?
+                    .and_then(|s| s.parse().ok()),
+            };
+
+            // Find the medication this reminder belongs to and add it
+            for med in &mut medications {
+                if let Some(med_id) = med.id {
+                    if med_id == reminder.medication_id {
+                        med.reminders.push(reminder);
+                        break;
+                    }
+                }
+            }
         }
     }
 
