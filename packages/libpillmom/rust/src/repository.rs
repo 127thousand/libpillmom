@@ -35,6 +35,7 @@ pub async fn create_medication(med: &Medication) -> Result<i64> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_medication(id: i64) -> Result<Option<Medication>> {
     let conn = get_connection().ok_or_else(|| anyhow::anyhow!("No database connection"))?;
     let conn = conn.lock().await;
@@ -240,6 +241,7 @@ pub async fn delete_reminder(id: i64) -> Result<bool> {
     Ok(true)
 }
 
+#[allow(dead_code)]
 pub async fn get_reminders_for_medication(medication_id: i64) -> Result<Vec<Reminder>> {
     let conn = get_connection().ok_or_else(|| anyhow::anyhow!("No database connection"))?;
     let conn = conn.lock().await;

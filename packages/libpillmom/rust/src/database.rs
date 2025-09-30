@@ -207,6 +207,7 @@ pub fn get_connection() -> Option<Arc<Mutex<Connection>>> {
     DATABASE.get().cloned()
 }
 
+#[allow(dead_code)]
 pub fn is_remote() -> bool {
     matches!(
         DB_TYPE.get(),

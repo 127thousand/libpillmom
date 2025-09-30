@@ -11,6 +11,13 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  RUSTUP_MAX_RETRIES: 10
+
 jobs:
   build-macos-ios:
     runs-on: macos-latest
@@ -24,6 +31,22 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/libpillmom/rust
+          cache-on-failure: true
+          shared-key: "macos"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install sccache
+        run: |
+          brew install sccache
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "ACTIONS_CACHE_URL=${{ env.ACTIONS_CACHE_URL }}" >> $GITHUB_ENV
+          echo "ACTIONS_RUNTIME_TOKEN=${{ env.ACTIONS_RUNTIME_TOKEN }}" >> $GITHUB_ENV
 
       - name: Build macOS and iOS libraries
         working-directory: packages/libpillmom/rust
@@ -43,18 +66,42 @@ jobs:
           cargo build --release --target aarch64-apple-ios-sim
           cp target/aarch64-apple-ios-sim/release/libpillmom.a ../ios/libpillmom_simulator.a
 
-      - name: Commit and push
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add -f packages/libpillmom/macos/*.dylib packages/libpillmom/ios/*.a || true
-          if ! git diff --staged --quiet; then
-            git commit -m "Update macOS and iOS libraries [skip ci]"
-            git push
-          fi
+      - name: Show sccache stats
+        run: sccache --show-stats
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-ios-artifacts
+          path: |
+            packages/libpillmom/macos/*.dylib
+            packages/libpillmom/ios/*.a
+          retention-days: 1
 
   build-linux-windows-android:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            output: linux/libpillmom.so
+            extension: .so
+          - target: x86_64-pc-windows-gnu
+            output: windows/libpillmom.dll
+            extension: .dll
+            filename: pillmom.dll
+          - target: aarch64-linux-android
+            output: android/src/main/jniLibs/arm64-v8a/libpillmom.so
+            extension: .so
+          - target: armv7-linux-androideabi
+            output: android/src/main/jniLibs/armeabi-v7a/libpillmom.so
+            extension: .so
+          - target: i686-linux-android
+            output: android/src/main/jniLibs/x86/libpillmom.so
+            extension: .so
+          - target: x86_64-linux-android
+            output: android/src/main/jniLibs/x86_64/libpillmom.so
+            extension: .so
 
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +109,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Free up disk space
+        if: matrix.target == 'aarch64-linux-android'
         run: |
           echo "Disk space before cleanup:"
           df -h
@@ -86,65 +134,167 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/libpillmom/rust
+          cache-on-failure: true
+          shared-key: "linux-${{ matrix.target }}"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Cache cross binary
+        id: cache-cross
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin/cross
+          key: cross-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cross-${{ runner.os }}-
+
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build Linux, Windows, and Android libraries
-        working-directory: packages/libpillmom/rust
+        if: steps.cache-cross.outputs.cache-hit != 'true'
         run: |
-          # Create directories
-          mkdir -p ../linux ../windows
-          mkdir -p ../android/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86,x86_64}
+          # Download pre-built cross binary instead of building from source
+          curl -L https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz | tar xz
+          mv cross ~/.cargo/bin/
 
-          # Build each target and clean up intermediate files to save space
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
 
-          # Linux
-          echo "Building Linux x86_64..."
-          cross build --release --target x86_64-unknown-linux-gnu
-          cp target/x86_64-unknown-linux-gnu/release/libpillmom.so ../linux/libpillmom.so
-          rm -rf target/x86_64-unknown-linux-gnu/release/deps
-          rm -rf target/x86_64-unknown-linux-gnu/release/build
+      - name: Build ${{ matrix.target }}
+        working-directory: packages/libpillmom/rust
+        env:
+          RUSTC_WRAPPER: sccache
+        run: |
+          # Create output directory
+          mkdir -p ../$(dirname "${{ matrix.output }}")
 
-          # Windows
-          echo "Building Windows x86_64..."
-          cross build --release --target x86_64-pc-windows-gnu
-          cp target/x86_64-pc-windows-gnu/release/pillmom.dll ../windows/libpillmom.dll
-          rm -rf target/x86_64-pc-windows-gnu/release/deps
-          rm -rf target/x86_64-pc-windows-gnu/release/build
+          # Build target
+          echo "Building ${{ matrix.target }}..."
+          cross build --release --target ${{ matrix.target }}
 
-          # Android ARM64
-          echo "Building Android ARM64..."
-          cross build --release --target aarch64-linux-android
-          cp target/aarch64-linux-android/release/libpillmom.so ../android/src/main/jniLibs/arm64-v8a/libpillmom.so
-          rm -rf target/aarch64-linux-android
+          # Copy the built library
+          if [ "${{ matrix.filename }}" != "" ]; then
+            cp target/${{ matrix.target }}/release/${{ matrix.filename }} ../${{ matrix.output }}
+          else
+            cp target/${{ matrix.target }}/release/libpillmom${{ matrix.extension }} ../${{ matrix.output }}
+          fi
 
-          # Android ARMv7
-          echo "Building Android ARMv7..."
-          cross build --release --target armv7-linux-androideabi
-          cp target/armv7-linux-androideabi/release/libpillmom.so ../android/src/main/jniLibs/armeabi-v7a/libpillmom.so
-          rm -rf target/armv7-linux-androideabi
+      - name: Show sccache stats
+        run: sccache --show-stats
 
-          # Android x86
-          echo "Building Android x86..."
-          cross build --release --target i686-linux-android
-          cp target/i686-linux-android/release/libpillmom.so ../android/src/main/jniLibs/x86/libpillmom.so
-          rm -rf target/i686-linux-android
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}
+          path: packages/libpillmom/${{ matrix.output }}
+          retention-days: 1
 
-          # Android x86_64
-          echo "Building Android x86_64..."
-          cross build --release --target x86_64-linux-android
-          cp target/x86_64-linux-android/release/libpillmom.so ../android/src/main/jniLibs/x86_64/libpillmom.so
-          rm -rf target/x86_64-linux-android
+  commit-all:
+    needs: [build-macos-ios, build-linux-windows-android]
+    runs-on: ubuntu-latest
+    # Only run on main branch to avoid conflicts
+    if: github.ref == 'refs/heads/main'
 
-          # Final cleanup
-          docker system prune -f
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Fetch more history to handle rebase if needed
+          fetch-depth: 10
 
-      - name: Commit and push
+      - name: Pull latest changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add -f packages/libpillmom/linux/*.so packages/libpillmom/windows/*.dll packages/libpillmom/android/**/*.so || true
+
+          # Try to pull and rebase up to 3 times in case of concurrent pushes
+          for i in {1..3}; do
+            echo "Attempt $i: Pulling latest changes..."
+            if git pull --rebase origin main; then
+              echo "Successfully pulled latest changes"
+              break
+            else
+              if [ $i -eq 3 ]; then
+                echo "Failed to pull after 3 attempts"
+                exit 1
+              fi
+              echo "Pull failed, waiting 5 seconds before retry..."
+              sleep 5
+            fi
+          done
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Copy all artifacts to correct locations
+        run: |
+          # Create all directories
+          mkdir -p packages/libpillmom/{macos,ios,linux,windows}
+          mkdir -p packages/libpillmom/android/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86,x86_64}
+
+          # Copy macOS and iOS artifacts
+          if [ -d "artifacts/macos-ios-artifacts" ]; then
+            echo "Processing macOS and iOS artifacts..."
+            cp artifacts/macos-ios-artifacts/packages/libpillmom/macos/*.dylib packages/libpillmom/macos/ 2>/dev/null || true
+            cp artifacts/macos-ios-artifacts/packages/libpillmom/ios/*.a packages/libpillmom/ios/ 2>/dev/null || true
+          fi
+
+          # Copy Linux, Windows, and Android artifacts
+          for target_dir in artifacts/*; do
+            target_name=$(basename "$target_dir")
+
+            # Skip the macos-ios-artifacts as we handled it above
+            if [ "$target_name" = "macos-ios-artifacts" ]; then
+              continue
+            fi
+
+            echo "Processing $target_name"
+
+            case "$target_name" in
+              *linux-gnu*)
+                cp "$target_dir"/packages/libpillmom/linux/* packages/libpillmom/linux/ 2>/dev/null || true
+                ;;
+              *windows*)
+                cp "$target_dir"/packages/libpillmom/windows/* packages/libpillmom/windows/ 2>/dev/null || true
+                ;;
+              *android*)
+                cp -r "$target_dir"/packages/libpillmom/android/* packages/libpillmom/android/ 2>/dev/null || true
+                ;;
+            esac
+          done
+
+      - name: Commit and push all changes
+        run: |
+          # Add all binary files
+          git add -f packages/libpillmom/macos/*.dylib 2>/dev/null || true
+          git add -f packages/libpillmom/ios/*.a 2>/dev/null || true
+          git add -f packages/libpillmom/linux/*.so 2>/dev/null || true
+          git add -f packages/libpillmom/windows/*.dll 2>/dev/null || true
+          git add -f packages/libpillmom/android/**/*.so 2>/dev/null || true
+
+          # Check if there are changes to commit
           if ! git diff --staged --quiet; then
-            git commit -m "Update Linux, Windows, and Android libraries [skip ci]"
-            git push
+            git commit -m "Update native libraries for all platforms [skip ci]"
+
+            # Try to push with retry logic
+            for i in {1..3}; do
+              echo "Attempt $i: Pushing changes..."
+              if git push origin main; then
+                echo "Successfully pushed changes"
+                exit 0
+              else
+                if [ $i -eq 3 ]; then
+                  echo "Failed to push after 3 attempts"
+                  exit 1
+                fi
+                echo "Push failed, pulling and rebasing..."
+                git pull --rebase origin main || exit 1
+                echo "Retrying push..."
+              fi
+            done
+          else
+            echo "No changes to commit"
           fi
