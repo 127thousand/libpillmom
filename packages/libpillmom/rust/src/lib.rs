@@ -2,7 +2,6 @@ mod frb_generated; /* AUTO INJECTED BY flutter_rust_bridge. This line may not be
 // Required for Flutter Rust Bridge
 pub mod api;
 mod database;
-mod entities;
 pub mod models;
 mod repository;
 

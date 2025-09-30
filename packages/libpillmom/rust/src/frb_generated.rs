@@ -634,10 +634,10 @@ fn wire__crate__api__PillMomApi_open_embedded_replica_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<PillMomApi>,
             >>::sse_decode(&mut deserializer);
-            let api_path = <String>::sse_decode(&mut deserializer);
+            let api__path = <String>::sse_decode(&mut deserializer);
             let api_url = <String>::sse_decode(&mut deserializer);
             let api_auth_token = <String>::sse_decode(&mut deserializer);
-            let api_sync_period = <Option<f64>>::sse_decode(&mut deserializer);
+            let api__sync_period = <Option<f64>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
@@ -661,10 +661,10 @@ fn wire__crate__api__PillMomApi_open_embedded_replica_impl(
                         let api_that_guard = api_that_guard.unwrap();
                         let output_ok = crate::api::PillMomApi::open_embedded_replica(
                             &*api_that_guard,
-                            api_path,
+                            api__path,
                             api_url,
                             api_auth_token,
-                            api_sync_period,
+                            api__sync_period,
                         )
                         .await?;
                         Ok(output_ok)
