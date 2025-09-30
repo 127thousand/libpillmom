@@ -20,7 +20,6 @@ sea-orm-migration = { version = "1.1", features = ["runtime-tokio-rustls", "sqlx
 
 # Keep libsql for Turso connection
 # Disable default features to avoid SQLite bundling conflicts
-libsql = { version = "0.6", default-features = false, features = ["remote", "tls", "replication"] }
 
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -32,6 +31,10 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 anyhow = "1.0"
 async-trait = "0.1"
+
+# libsql for Turso connection and embedded replicas
+# Testing if v0.9 resolves conflicts - enable replication for all platforms
+libsql = { version = "0.9", default-features = false, features = ["remote", "tls", "replication"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"
