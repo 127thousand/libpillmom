@@ -61,6 +61,28 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Free up disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+          # Remove unnecessary tools and files
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+          # Clean apt cache
+          sudo apt-get clean
+
+          # Remove docker images we don't need
+          docker system prune -af
+
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -74,29 +96,48 @@ jobs:
           mkdir -p ../linux ../windows
           mkdir -p ../android/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86,x86_64}
 
+          # Build each target and clean up intermediate files to save space
+
           # Linux
+          echo "Building Linux x86_64..."
           cross build --release --target x86_64-unknown-linux-gnu
           cp target/x86_64-unknown-linux-gnu/release/libpillmom.so ../linux/libpillmom.so
+          rm -rf target/x86_64-unknown-linux-gnu/release/deps
+          rm -rf target/x86_64-unknown-linux-gnu/release/build
 
           # Windows
+          echo "Building Windows x86_64..."
           cross build --release --target x86_64-pc-windows-gnu
           cp target/x86_64-pc-windows-gnu/release/pillmom.dll ../windows/libpillmom.dll
+          rm -rf target/x86_64-pc-windows-gnu/release/deps
+          rm -rf target/x86_64-pc-windows-gnu/release/build
 
           # Android ARM64
+          echo "Building Android ARM64..."
           cross build --release --target aarch64-linux-android
           cp target/aarch64-linux-android/release/libpillmom.so ../android/src/main/jniLibs/arm64-v8a/libpillmom.so
+          rm -rf target/aarch64-linux-android
 
           # Android ARMv7
+          echo "Building Android ARMv7..."
           cross build --release --target armv7-linux-androideabi
           cp target/armv7-linux-androideabi/release/libpillmom.so ../android/src/main/jniLibs/armeabi-v7a/libpillmom.so
+          rm -rf target/armv7-linux-androideabi
 
           # Android x86
+          echo "Building Android x86..."
           cross build --release --target i686-linux-android
           cp target/i686-linux-android/release/libpillmom.so ../android/src/main/jniLibs/x86/libpillmom.so
+          rm -rf target/i686-linux-android
 
           # Android x86_64
+          echo "Building Android x86_64..."
           cross build --release --target x86_64-linux-android
           cp target/x86_64-linux-android/release/libpillmom.so ../android/src/main/jniLibs/x86_64/libpillmom.so
+          rm -rf target/x86_64-linux-android
+
+          # Final cleanup
+          docker system prune -f
 
       - name: Commit and push
         run: |
