@@ -11,6 +11,7 @@ static DB_HANDLE: OnceCell<Database> = OnceCell::new();
 static SEA_DB: OnceCell<DatabaseConnection> = OnceCell::new();
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 enum DbType {
     InMemory,
     Local,
@@ -101,8 +102,9 @@ pub async fn init_remote_db(url: &str, auth_token: &str) -> Result<()> {
 }
 
 /// Initialize an embedded replica (local SQLite that syncs with remote)
+#[allow(dead_code)]
 pub async fn init_embedded_replica(
-    path: &str,
+    _path: &str,
     url: &str,
     auth_token: &str,
     _sync_period: Option<Duration>,
@@ -132,6 +134,7 @@ pub async fn init_embedded_replica(
 }
 
 // Legacy support for old API
+#[allow(dead_code)]
 pub async fn init_turso_db(url: &str, auth_token: &str) -> Result<()> {
     init_remote_db(url, auth_token).await
 }

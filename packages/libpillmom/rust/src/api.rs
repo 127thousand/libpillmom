@@ -34,10 +34,10 @@ impl PillMomApi {
     /// Note: Currently using remote connection due to FFI issues with embedded replicas
     pub async fn open_embedded_replica(
         &self,
-        path: String,
+        _path: String,
         url: String,
         auth_token: String,
-        sync_period: Option<f64>, // Sync period in seconds
+        _sync_period: Option<f64>, // Sync period in seconds
     ) -> Result<()> {
         // TODO: Fix embedded replica crash and use sync_period
         // For now, fall back to remote connection
