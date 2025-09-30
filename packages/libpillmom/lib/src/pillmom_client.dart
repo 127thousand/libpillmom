@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'package:ffi/ffi.dart';
-
 import 'ffi/bindings.dart';
 import 'ffi/library_loader.dart';
 import 'models/medication.dart';
@@ -11,7 +10,8 @@ class PillMomClient {
   static PillMomClient? _instance;
 
   PillMomClient._internal() {
-    _bindings = PillMomBindings(LibraryLoader.library);
+    final dylib = LibraryLoader.loadLibrary();
+    _bindings = PillMomBindings(dylib);
   }
 
   factory PillMomClient() {
@@ -19,212 +19,207 @@ class PillMomClient {
     return _instance!;
   }
 
-  /// Initialize local database
-  bool initLocalDatabase({String dbPath = 'pillmom.db'}) {
-    final pathPtr = dbPath.toNativeUtf8();
-    try {
-      final result = _bindings.initDatabase(pathPtr);
-      return result == 0;
-    } finally {
-      malloc.free(pathPtr);
+  String _callRustFunction(Pointer<Utf8> Function() fn) {
+    final resultPtr = fn();
+    final result = resultPtr.toDartString();
+    _bindings.freeString(resultPtr);
+    return result;
+  }
+
+  String _callRustFunctionWithParam(
+      Pointer<Utf8> Function(Pointer<Utf8>) fn, String param) {
+    final paramPtr = param.toNativeUtf8();
+    final resultPtr = fn(paramPtr);
+    final result = resultPtr.toDartString();
+    malloc.free(paramPtr);
+    _bindings.freeString(resultPtr);
+    return result;
+  }
+
+  String _callRustFunctionWithTwoParams(
+      Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>) fn,
+      String param1,
+      String param2) {
+    final param1Ptr = param1.toNativeUtf8();
+    final param2Ptr = param2.toNativeUtf8();
+    final resultPtr = fn(param1Ptr, param2Ptr);
+    final result = resultPtr.toDartString();
+    malloc.free(param1Ptr);
+    malloc.free(param2Ptr);
+    _bindings.freeString(resultPtr);
+    return result;
+  }
+
+  String _callRustFunctionWithIntParam(
+      Pointer<Utf8> Function(int) fn, int param) {
+    final resultPtr = fn(param);
+    final result = resultPtr.toDartString();
+    _bindings.freeString(resultPtr);
+    return result;
+  }
+
+  Future<void> initTursoDatabase(String url, String authToken) async {
+    final result = _callRustFunctionWithTwoParams(
+        _bindings.initTursoDb, url, authToken);
+    final json = jsonDecode(result);
+    if (json['success'] != true) {
+      throw Exception(json['error'] ?? 'Failed to initialize Turso database');
     }
   }
 
-  /// Initialize Turso database
-  bool initTursoDatabase({required String databaseUrl, required String authToken}) {
-    final urlPtr = databaseUrl.toNativeUtf8();
-    final tokenPtr = authToken.toNativeUtf8();
-    try {
-      final result = _bindings.initTursoDatabase(urlPtr, tokenPtr);
-      return result == 0;
-    } finally {
-      malloc.free(urlPtr);
-      malloc.free(tokenPtr);
+  Future<void> initLocalDatabase([String? dbPath]) async {
+    final path = dbPath ?? 'pillmom.db';
+    final result = _callRustFunctionWithParam(_bindings.initLocalDb, path);
+    final json = jsonDecode(result);
+    if (json['success'] != true) {
+      throw Exception(json['error'] ?? 'Failed to initialize local database');
     }
   }
 
-  /// Close database connection
-  bool closeDatabase() {
-    final result = _bindings.closeDatabase();
-    return result == 0;
+  Future<void> syncDatabase() async {
+    final result = _callRustFunction(_bindings.syncDatabase);
+    final json = jsonDecode(result);
+    if (json['success'] != true) {
+      throw Exception(json['error'] ?? 'Failed to sync database');
+    }
   }
 
-  /// Create a new medication
-  int? createMedication({
+  Future<void> closeDatabase() async {
+    final result = _callRustFunction(_bindings.closeDatabase);
+    final json = jsonDecode(result);
+    if (json['success'] != true) {
+      throw Exception(json['error'] ?? 'Failed to close database');
+    }
+  }
+
+  Future<int> createMedication({
     required String name,
     required String dosage,
     String description = '',
-  }) {
-    final namePtr = name.toNativeUtf8();
-    final dosagePtr = dosage.toNativeUtf8();
-    final descPtr = description.toNativeUtf8();
+  }) async {
+    final medication = {
+      'name': name,
+      'dosage': dosage,
+      'description': description,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': null,
+      'reminders': [],
+    };
 
-    try {
-      final result = _bindings.createMedication(namePtr, dosagePtr, descPtr);
-      return result >= 0 ? result : null;
-    } finally {
-      malloc.free(namePtr);
-      malloc.free(dosagePtr);
-      malloc.free(descPtr);
+    final result = _callRustFunctionWithParam(
+        _bindings.createMedication, jsonEncode(medication));
+    final json = jsonDecode(result);
+
+    if (json['success'] == true) {
+      return json['id'];
+    } else {
+      throw Exception(json['error'] ?? 'Failed to create medication');
     }
   }
 
-  /// Get medication by ID
-  Medication? getMedication(int id) {
-    final jsonPtr = _bindings.getMedication(id);
-    if (jsonPtr == nullptr) return null;
+  Future<List<Medication>> getAllMedications() async {
+    final result = _callRustFunction(_bindings.getAllMedications);
+    final json = jsonDecode(result);
 
-    try {
-      final jsonStr = jsonPtr.toDartString();
-      final json = jsonDecode(jsonStr);
-      return Medication.fromJson(json);
-    } finally {
-      _bindings.freeString(jsonPtr);
+    if (json['success'] == true) {
+      final List<dynamic> medicationsJson = json['medications'];
+      return medicationsJson
+          .map((m) => Medication.fromJson(m as Map<String, dynamic>))
+          .toList();
+    } else {
+      throw Exception(json['error'] ?? 'Failed to get medications');
     }
   }
 
-  /// Get all medications
-  List<Medication> getAllMedications() {
-    final jsonPtr = _bindings.getAllMedications();
-    if (jsonPtr == nullptr) return [];
+  Future<bool> updateMedication(Medication medication) async {
+    final medicationJson = medication.toJson();
 
-    try {
-      final jsonStr = jsonPtr.toDartString();
-      final jsonList = jsonDecode(jsonStr) as List;
-      return jsonList.map((json) => Medication.fromJson(json)).toList();
-    } finally {
-      _bindings.freeString(jsonPtr);
+    final result = _callRustFunctionWithParam(
+        _bindings.updateMedication, jsonEncode(medicationJson));
+    final json = jsonDecode(result);
+
+    if (json['success'] == true) {
+      return json['updated'] == true;
+    } else {
+      throw Exception(json['error'] ?? 'Failed to update medication');
     }
   }
 
-  /// Update medication
-  bool updateMedication({
-    required int id,
-    required String name,
-    required String dosage,
-    String description = '',
-  }) {
-    final namePtr = name.toNativeUtf8();
-    final dosagePtr = dosage.toNativeUtf8();
-    final descPtr = description.toNativeUtf8();
+  Future<bool> deleteMedication(int id) async {
+    final result = _callRustFunctionWithIntParam(_bindings.deleteMedication, id);
+    final json = jsonDecode(result);
 
-    try {
-      final result = _bindings.updateMedication(id, namePtr, dosagePtr, descPtr);
-      return result == 0;
-    } finally {
-      malloc.free(namePtr);
-      malloc.free(dosagePtr);
-      malloc.free(descPtr);
+    if (json['success'] == true) {
+      return json['deleted'] == true;
+    } else {
+      throw Exception(json['error'] ?? 'Failed to delete medication');
     }
   }
 
-  /// Delete medication
-  bool deleteMedication(int id) {
-    final result = _bindings.deleteMedication(id);
-    return result == 0;
-  }
-
-  /// Create a new reminder
-  int? createReminder({
+  Future<int> createReminder({
     required int medicationId,
-    required String time,
-    String days = 'Daily',
-  }) {
-    final timePtr = time.toNativeUtf8();
-    final daysPtr = days.toNativeUtf8();
-
-    try {
-      final result = _bindings.createReminder(medicationId, timePtr, daysPtr);
-      return result >= 0 ? result : null;
-    } finally {
-      malloc.free(timePtr);
-      malloc.free(daysPtr);
-    }
-  }
-
-  /// Get reminder by ID
-  Reminder? getReminder(int id) {
-    final jsonPtr = _bindings.getReminder(id);
-    if (jsonPtr == nullptr) return null;
-
-    try {
-      final jsonStr = jsonPtr.toDartString();
-      final json = jsonDecode(jsonStr);
-      return Reminder.fromJson(json);
-    } finally {
-      _bindings.freeString(jsonPtr);
-    }
-  }
-
-  /// Get reminders by medication ID
-  List<Reminder> getRemindersByMedication(int medicationId) {
-    final jsonPtr = _bindings.getRemindersByMedication(medicationId);
-    if (jsonPtr == nullptr) return [];
-
-    try {
-      final jsonStr = jsonPtr.toDartString();
-      final jsonList = jsonDecode(jsonStr) as List;
-      return jsonList.map((json) => Reminder.fromJson(json)).toList();
-    } finally {
-      _bindings.freeString(jsonPtr);
-    }
-  }
-
-  /// Get all reminders
-  List<Reminder> getAllReminders() {
-    final jsonPtr = _bindings.getAllReminders();
-    if (jsonPtr == nullptr) return [];
-
-    try {
-      final jsonStr = jsonPtr.toDartString();
-      final jsonList = jsonDecode(jsonStr) as List;
-      return jsonList.map((json) => Reminder.fromJson(json)).toList();
-    } finally {
-      _bindings.freeString(jsonPtr);
-    }
-  }
-
-  /// Get active reminders
-  List<Reminder> getActiveReminders() {
-    final jsonPtr = _bindings.getActiveReminders();
-    if (jsonPtr == nullptr) return [];
-
-    try {
-      final jsonStr = jsonPtr.toDartString();
-      final jsonList = jsonDecode(jsonStr) as List;
-      return jsonList.map((json) => Reminder.fromJson(json)).toList();
-    } finally {
-      _bindings.freeString(jsonPtr);
-    }
-  }
-
-  /// Update reminder
-  bool updateReminder({
-    required int id,
     required String time,
     required String days,
     bool isActive = true,
-  }) {
-    final timePtr = time.toNativeUtf8();
-    final daysPtr = days.toNativeUtf8();
+  }) async {
+    final reminder = {
+      'medication_id': medicationId,
+      'time': time,
+      'days': days,
+      'is_active': isActive,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+      'deleted_at': null,
+    };
 
-    try {
-      final result = _bindings.updateReminder(
-        id,
-        timePtr,
-        daysPtr,
-        isActive ? 1 : 0,
-      );
-      return result == 0;
-    } finally {
-      malloc.free(timePtr);
-      malloc.free(daysPtr);
+    final result = _callRustFunctionWithParam(
+        _bindings.createReminder, jsonEncode(reminder));
+    final json = jsonDecode(result);
+
+    if (json['success'] == true) {
+      return json['id'];
+    } else {
+      throw Exception(json['error'] ?? 'Failed to create reminder');
     }
   }
 
-  /// Delete reminder
-  bool deleteReminder(int id) {
-    final result = _bindings.deleteReminder(id);
-    return result == 0;
+  Future<List<Reminder>> getActiveReminders() async {
+    final result = _callRustFunction(_bindings.getActiveReminders);
+    final json = jsonDecode(result);
+
+    if (json['success'] == true) {
+      final List<dynamic> remindersJson = json['reminders'];
+      return remindersJson
+          .map((r) => Reminder.fromJson(r as Map<String, dynamic>))
+          .toList();
+    } else {
+      throw Exception(json['error'] ?? 'Failed to get active reminders');
+    }
+  }
+
+  Future<bool> updateReminder(Reminder reminder) async {
+    final reminderJson = reminder.toJson();
+
+    final result = _callRustFunctionWithParam(
+        _bindings.updateReminder, jsonEncode(reminderJson));
+    final json = jsonDecode(result);
+
+    if (json['success'] == true) {
+      return json['updated'] == true;
+    } else {
+      throw Exception(json['error'] ?? 'Failed to update reminder');
+    }
+  }
+
+  Future<bool> deleteReminder(int id) async {
+    final result = _callRustFunctionWithIntParam(_bindings.deleteReminder, id);
+    final json = jsonDecode(result);
+
+    if (json['success'] == true) {
+      return json['deleted'] == true;
+    } else {
+      throw Exception(json['error'] ?? 'Failed to delete reminder');
+    }
   }
 }
