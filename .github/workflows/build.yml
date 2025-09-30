@@ -40,16 +40,13 @@ jobs:
           shared-key: "macos"
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Install sccache
-        run: |
-          brew install sccache
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-          echo "ACTIONS_CACHE_URL=${{ env.ACTIONS_CACHE_URL }}" >> $GITHUB_ENV
-          echo "ACTIONS_RUNTIME_TOKEN=${{ env.ACTIONS_RUNTIME_TOKEN }}" >> $GITHUB_ENV
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
 
       - name: Build macOS and iOS libraries
         working-directory: packages/libpillmom/rust
+        env:
+          RUSTC_WRAPPER: sccache
         run: |
           # Create directories
           mkdir -p ../macos ../ios
