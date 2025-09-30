@@ -1,4 +1,4 @@
-name: Build and Commit Native Libraries
+name: Build Native Libraries
 
 on:
   push:
@@ -12,94 +12,6 @@ permissions:
   contents: write
 
 jobs:
-  build-linux-windows-android:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-
-      # Setup Android NDK
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r26
-          add-to-path: true
-
-      # Build for Linux, Windows, and Android
-      - name: Build libraries for Linux, Windows, and Android
-        working-directory: packages/libpillmom/native
-        run: |
-          # Create platform directories
-          mkdir -p ../android/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86,x86_64}
-          mkdir -p ../linux
-          mkdir -p ../windows
-
-          # Build for Android
-          export ANDROID_NDK_HOME=$ANDROID_NDK_ROOT
-
-          # Android arm64
-          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
-          export GOOS=android
-          export GOARCH=arm64
-          export CGO_ENABLED=1
-          go build -buildmode=c-shared -o ../android/src/main/jniLibs/arm64-v8a/libpillmom.so ./ffi_bridge.go
-
-          # Android arm
-          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang
-          export GOARCH=arm
-          go build -buildmode=c-shared -o ../android/src/main/jniLibs/armeabi-v7a/libpillmom.so ./ffi_bridge.go
-
-          # Android x86
-          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android30-clang
-          export GOARCH=386
-          go build -buildmode=c-shared -o ../android/src/main/jniLibs/x86/libpillmom.so ./ffi_bridge.go
-
-          # Android x86_64
-          export CC=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android30-clang
-          export GOARCH=amd64
-          go build -buildmode=c-shared -o ../android/src/main/jniLibs/x86_64/libpillmom.so ./ffi_bridge.go
-
-          # Linux amd64
-          export GOOS=linux
-          export GOARCH=amd64
-          export CC=gcc
-          go build -buildmode=c-shared -o ../linux/libpillmom.so ./ffi_bridge.go
-
-          # Windows amd64 (cross-compile)
-          export GOOS=windows
-          export GOARCH=amd64
-          export CC=x86_64-w64-mingw32-gcc
-          export CGO_ENABLED=1
-          sudo apt-get update && sudo apt-get install -y mingw-w64
-          go build -buildmode=c-shared -o ../windows/libpillmom.dll ./ffi_bridge.go
-
-      - name: Commit and push libraries
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-
-          # Update remote URL to correct repository
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-
-          # Force add all library files (even if gitignored)
-          git add -f packages/libpillmom/android/src/main/jniLibs/**/*.so || true
-          git add -f packages/libpillmom/linux/*.so || true
-          git add -f packages/libpillmom/windows/*.dll || true
-
-          # Commit if there are changes
-          if ! git diff --staged --quiet; then
-            git commit -m "Update Linux, Windows, and Android libraries [skip ci]"
-            git pull --rebase origin main
-            git push
-          fi
-
   build-macos-ios:
     runs-on: macos-latest
 
@@ -108,63 +20,90 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version: '1.24'
+          targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
 
       - name: Build macOS and iOS libraries
         working-directory: packages/libpillmom/native
         run: |
-          # Create platform directories
-          mkdir -p ../ios
-          mkdir -p ../macos
+          # Create directories
+          mkdir -p ../macos ../ios
 
-          # Build macOS libraries
-          export CGO_ENABLED=1
+          # Build for macOS ARM64
+          cargo build --release --target aarch64-apple-darwin
+          cp target/aarch64-apple-darwin/release/libpillmom.dylib ../macos/libpillmom.dylib
 
-          # GitHub Actions macOS runners are now ARM64 (M1)
-          # go-libsql only provides libraries for darwin_arm64, not darwin_amd64
-          echo "Building for macOS arm64..."
-          export GOOS=darwin
-          export GOARCH=arm64
-          go build -buildmode=c-shared -o ../macos/libpillmom.dylib ./ffi_bridge.go
+          # Build for iOS
+          cargo build --release --target aarch64-apple-ios
+          cp target/aarch64-apple-ios/release/libpillmom.a ../ios/libpillmom.a
 
-          # iOS builds are challenging because:
-          # 1. go-libsql doesn't provide iOS-specific libraries
-          # 2. Cross-compilation from macOS to iOS with CGO is complex
-          #
-          # Workaround: Build a Darwin ARM64 library that can potentially work on iOS
-          # This isn't ideal but allows basic functionality
-          echo "Building iOS libraries (using Darwin ARM64 as base)..."
+          # Build for iOS Simulator
+          cargo build --release --target aarch64-apple-ios-sim
+          cp target/aarch64-apple-ios-sim/release/libpillmom.a ../ios/libpillmom_simulator.a
 
-          # Build static library for iOS (using darwin/arm64 which is compatible)
-          go build -buildmode=c-archive -o ../ios/libpillmom.a .
-
-          # Copy for simulator (simulator on M1 Macs is also ARM64)
-          cp ../ios/libpillmom.a ../ios/libpillmom_simulator.a
-
-          # Remove header files (not needed for FFI)
-          rm -f ../ios/*.h ../macos/*.h
-
-          echo "Note: iOS libraries are built using Darwin ARM64 target due to go-libsql limitations"
-          echo "For production iOS apps, consider using a different SQLite driver or building locally"
-
-      - name: Commit and push iOS and macOS libraries
+      - name: Commit and push
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-
-          # Update remote URL to correct repository
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-
-          # Force add iOS and macOS library files (even if gitignored)
-          git add -f packages/libpillmom/ios/*.a || true
-          git add -f packages/libpillmom/macos/*.dylib || true
-
-          # Commit if there are changes
+          git add -f packages/libpillmom/macos/*.dylib packages/libpillmom/ios/*.a || true
           if ! git diff --staged --quiet; then
-            git commit -m "Update iOS and macOS libraries [skip ci]"
-            git pull --rebase origin main
+            git commit -m "Update macOS and iOS libraries [skip ci]"
+            git push
+          fi
+
+  build-linux-windows-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build Linux, Windows, and Android libraries
+        working-directory: packages/libpillmom/native
+        run: |
+          # Create directories
+          mkdir -p ../linux ../windows
+          mkdir -p ../android/src/main/jniLibs/{arm64-v8a,armeabi-v7a,x86,x86_64}
+
+          # Linux
+          cross build --release --target x86_64-unknown-linux-gnu
+          cp target/x86_64-unknown-linux-gnu/release/libpillmom.so ../linux/libpillmom.so
+
+          # Windows
+          cross build --release --target x86_64-pc-windows-gnu
+          cp target/x86_64-pc-windows-gnu/release/pillmom.dll ../windows/libpillmom.dll
+
+          # Android ARM64
+          cross build --release --target aarch64-linux-android
+          cp target/aarch64-linux-android/release/libpillmom.so ../android/src/main/jniLibs/arm64-v8a/libpillmom.so
+
+          # Android ARMv7
+          cross build --release --target armv7-linux-androideabi
+          cp target/armv7-linux-androideabi/release/libpillmom.so ../android/src/main/jniLibs/armeabi-v7a/libpillmom.so
+
+          # Android x86
+          cross build --release --target i686-linux-android
+          cp target/i686-linux-android/release/libpillmom.so ../android/src/main/jniLibs/x86/libpillmom.so
+
+          # Android x86_64
+          cross build --release --target x86_64-linux-android
+          cp target/x86_64-linux-android/release/libpillmom.so ../android/src/main/jniLibs/x86_64/libpillmom.so
+
+      - name: Commit and push
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -f packages/libpillmom/linux/*.so packages/libpillmom/windows/*.dll packages/libpillmom/android/**/*.so || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Linux, Windows, and Android libraries [skip ci]"
             git push
           fi
