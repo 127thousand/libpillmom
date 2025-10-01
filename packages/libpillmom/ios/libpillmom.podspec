@@ -18,14 +18,6 @@ A Flutter plugin for managing medications and reminders using Go+Turso/SQLite vi
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
   s.swift_version = '5.0'
 
-  # Add the static libraries for device and simulator
-  s.vendored_libraries = 'libpillmom.a', 'libpillmom_simulator.a'
-
-  # Configure which library to use based on the SDK
-  s.pod_target_xcconfig = {
-    'DEFINES_MODULE' => 'YES',
-    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS[sdk=iphoneos*]' => '$(inherited) -force_load $(PODS_TARGET_SRCROOT)/libpillmom.a',
-    'OTHER_LDFLAGS[sdk=iphonesimulator*]' => '$(inherited) -force_load $(PODS_TARGET_SRCROOT)/libpillmom_simulator.a'
-  }
+  # Use XCFramework
+  s.vendored_frameworks = 'libpillmom.xcframework'
 end

@@ -57,13 +57,17 @@ jobs:
           # Fix install name to use @rpath
           install_name_tool -id "@rpath/libpillmom.dylib" ../macos/libpillmom.dylib
 
-          # Build for iOS
+          # Build for iOS device
           cargo build --release --target aarch64-apple-ios
-          cp target/aarch64-apple-ios/release/libpillmom.a ../ios/libpillmom.a
 
           # Build for iOS Simulator
           cargo build --release --target aarch64-apple-ios-sim
-          cp target/aarch64-apple-ios-sim/release/libpillmom.a ../ios/libpillmom_simulator.a
+
+          # Create XCFramework
+          xcodebuild -create-xcframework \
+            -library target/aarch64-apple-ios/release/libpillmom.a \
+            -library target/aarch64-apple-ios-sim/release/libpillmom.a \
+            -output ../ios/libpillmom.xcframework
 
       - name: Show sccache stats
         run: sccache --show-stats
@@ -74,7 +78,7 @@ jobs:
           name: macos-ios-artifacts
           path: |
             packages/libpillmom/macos/*.dylib
-            packages/libpillmom/ios/*.a
+            packages/libpillmom/ios/libpillmom.xcframework
           retention-days: 1
 
   build-linux-windows-android:
@@ -239,7 +243,7 @@ jobs:
           if [ -d "artifacts/macos-ios-artifacts" ]; then
             echo "Processing macOS and iOS artifacts..."
             cp artifacts/macos-ios-artifacts/packages/libpillmom/macos/*.dylib packages/libpillmom/macos/ 2>/dev/null || true
-            cp artifacts/macos-ios-artifacts/packages/libpillmom/ios/*.a packages/libpillmom/ios/ 2>/dev/null || true
+            cp -r artifacts/macos-ios-artifacts/packages/libpillmom/ios/libpillmom.xcframework packages/libpillmom/ios/ 2>/dev/null || true
           fi
 
           # Copy Linux, Windows, and Android artifacts
@@ -270,7 +274,7 @@ jobs:
         run: |
           # Add all binary files
           git add -f packages/libpillmom/macos/*.dylib 2>/dev/null || true
-          git add -f packages/libpillmom/ios/*.a 2>/dev/null || true
+          git add -f packages/libpillmom/ios/libpillmom.xcframework 2>/dev/null || true
           git add -f packages/libpillmom/linux/*.so 2>/dev/null || true
           git add -f packages/libpillmom/windows/*.dll 2>/dev/null || true
           git add -f packages/libpillmom/android/**/*.so 2>/dev/null || true

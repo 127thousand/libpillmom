@@ -69,19 +69,18 @@ case "$OS" in
 
             # Build for iOS device
             cargo build --release --target aarch64-apple-ios
-            copy_library "target/aarch64-apple-ios/release/libpillmom.a" "../ios/libpillmom.a"
 
-            # Build for iOS simulator (x86_64 for Intel Macs)
-            if [ "$ARCH" != "arm64" ]; then
-                cargo build --release --target x86_64-apple-ios
-                copy_library "target/x86_64-apple-ios/release/libpillmom.a" "../ios/libpillmom_simulator.a"
-            else
-                # For Apple Silicon Macs, build for arm64 iOS simulator
-                cargo build --release --target aarch64-apple-ios-sim
-                copy_library "target/aarch64-apple-ios-sim/release/libpillmom.a" "../ios/libpillmom_simulator.a"
-            fi
+            # Build for iOS simulator
+            cargo build --release --target aarch64-apple-ios-sim
 
-            echo -e "${GREEN}✅ Built for iOS${NC}"
+            # Create XCFramework
+            rm -rf ../ios/libpillmom.xcframework
+            xcodebuild -create-xcframework \
+                -library target/aarch64-apple-ios/release/libpillmom.a \
+                -library target/aarch64-apple-ios-sim/release/libpillmom.a \
+                -output ../ios/libpillmom.xcframework
+
+            echo -e "${GREEN}✅ Built iOS XCFramework${NC}"
         fi
         ;;
 
