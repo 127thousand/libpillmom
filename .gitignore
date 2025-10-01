@@ -29,8 +29,9 @@ packages/libpillmom/rust/target/
 *.dll
 *.so
 *.dylib
+*.a
 !packages/libpillmom/android/src/main/jniLibs/**/*.so
-!packages/libpillmom/ios/*.a
+!packages/libpillmom/ios/**/*.a
 !packages/libpillmom/linux/*.so
 !packages/libpillmom/macos/*.dylib
 !packages/libpillmom/windows/*.dll
