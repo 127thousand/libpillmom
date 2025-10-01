@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'packages/libpillmom/rust/**'
+      - 'packages/libpillmom/lib/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
