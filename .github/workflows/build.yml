@@ -63,10 +63,16 @@ jobs:
           # Build for iOS Simulator
           cargo build --release --target aarch64-apple-ios-sim
 
+          # Create temporary directories for XCFramework creation
+          mkdir -p /tmp/ios-device /tmp/ios-sim
+          cp target/aarch64-apple-ios/release/libpillmom.a /tmp/ios-device/
+          cp target/aarch64-apple-ios-sim/release/libpillmom.a /tmp/ios-sim/
+
           # Create XCFramework
+          rm -rf ../ios/libpillmom.xcframework
           xcodebuild -create-xcframework \
-            -library target/aarch64-apple-ios/release/libpillmom.a \
-            -library target/aarch64-apple-ios-sim/release/libpillmom.a \
+            -library /tmp/ios-device/libpillmom.a \
+            -library /tmp/ios-sim/libpillmom.a \
             -output ../ios/libpillmom.xcframework
 
       - name: Show sccache stats
