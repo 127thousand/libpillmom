@@ -52,10 +52,14 @@ case "$OS" in
         if [ "$ARCH" = "arm64" ]; then
             cargo build --release --target aarch64-apple-darwin
             copy_library "target/aarch64-apple-darwin/release/libpillmom.dylib" "../macos/libpillmom.dylib"
+            # Fix install name to use @rpath
+            install_name_tool -id "@rpath/libpillmom.dylib" "../macos/libpillmom.dylib"
             echo -e "${GREEN}✅ Built for macOS Apple Silicon${NC}"
         else
             cargo build --release --target x86_64-apple-darwin
             copy_library "target/x86_64-apple-darwin/release/libpillmom.dylib" "../macos/libpillmom.dylib"
+            # Fix install name to use @rpath
+            install_name_tool -id "@rpath/libpillmom.dylib" "../macos/libpillmom.dylib"
             echo -e "${GREEN}✅ Built for macOS Intel${NC}"
         fi
 

@@ -54,6 +54,8 @@ jobs:
           # Build for macOS ARM64
           cargo build --release --target aarch64-apple-darwin
           cp target/aarch64-apple-darwin/release/libpillmom.dylib ../macos/libpillmom.dylib
+          # Fix install name to use @rpath
+          install_name_tool -id "@rpath/libpillmom.dylib" ../macos/libpillmom.dylib
 
           # Build for iOS
           cargo build --release --target aarch64-apple-ios
