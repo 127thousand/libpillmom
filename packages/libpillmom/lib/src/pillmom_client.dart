@@ -16,24 +16,33 @@ class PillMomClient {
 
   static Future<void> _ensureInitialized() async {
     if (!_initialized) {
-      // Get the proper library path
-      String libraryPath;
-      if (Platform.isMacOS) {
+      // Initialize the Rust library
+      if (Platform.isIOS) {
+        // For iOS, the static library is linked into the app executable
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.process(),
+        );
+      } else if (Platform.isMacOS) {
         // For macOS, look for the library relative to the package
         final packageRoot = path.dirname(path.dirname(Platform.script.path));
-        libraryPath = path.join(packageRoot, 'macos', 'libpillmom.dylib');
+        final libraryPath = path.join(packageRoot, 'macos', 'libpillmom.dylib');
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.open(libraryPath),
+        );
       } else if (Platform.isLinux) {
-        libraryPath = 'libpillmom.so';
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.open('libpillmom.so'),
+        );
       } else if (Platform.isWindows) {
-        libraryPath = 'libpillmom.dll';
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.open('libpillmom.dll'),
+        );
       } else {
-        libraryPath = 'libpillmom';
+        // Android uses .so files bundled with the app
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.open('libpillmom.so'),
+        );
       }
-
-      // Initialize the Rust library with explicit path
-      await RustLib.init(
-        externalLibrary: ExternalLibrary.open(libraryPath),
-      );
       _initialized = true;
     }
   }
